@@ -11,3 +11,15 @@
 
 # Built Visual Studio Code Extensions
 *.vsix
+
+### IntelliJ IDEA ###
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+.idea/
+/.idea/.gitignore
+/ece382n-distributed-systems.iml
+/.idea/libraries/ece382n_distributed_systems.xml
+/.idea/misc.xml
+/.idea/modules.xml
+/.idea/vcs.xml
