@@ -9,7 +9,14 @@ import java.io.Serializable;
 public class Response implements Serializable {
     static final long serialVersionUID=2L;
     // your data here
-
+    public boolean ack; // indicate ack of acceptors
+    public int proposalNumber;
+    public Object value;
 
     // Your constructor and methods here
+    public Response(boolean ack, int proposalNumber, Object value) {
+        this.ack = ack;
+        this.proposalNumber = proposalNumber;
+        this.value = value;
+    }
 }

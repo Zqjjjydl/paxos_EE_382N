@@ -10,7 +10,14 @@ import java.io.Serializable;
 public class Request implements Serializable {
     static final long serialVersionUID=1L;
     // Your data here
-
+    public int seq; // sequence number
+    public int proposalNumber;
+    public Object value;
 
     // Your constructor and methods here
+    public Request(int seq, int proposalNumber, Object value) {
+        this.seq = seq;
+        this.proposalNumber = proposalNumber;
+        this.value = value;
+    }
 }
