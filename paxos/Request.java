@@ -10,14 +10,18 @@ import java.io.Serializable;
 public class Request implements Serializable {
     static final long serialVersionUID=1L;
     // Your data here
-    public int seq; // sequence number
+    public int seq; // sequence number, which is used to indicate proposal
     public int proposalNumber;
     public Object value;
+    public int me; // indicate which machine sent the request
+    public int highestDone; //
 
     // Your constructor and methods here
-    public Request(int seq, int proposalNumber, Object value) {
+    public Request(int seq, int proposalNumber, Object value, int me, int highestDone) {
         this.seq = seq;
         this.proposalNumber = proposalNumber;
         this.value = value;
+        this.me = me;
+        this.highestDone = highestDone;
     }
 }

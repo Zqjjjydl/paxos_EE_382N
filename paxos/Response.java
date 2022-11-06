@@ -11,12 +11,14 @@ public class Response implements Serializable {
     // your data here
     public boolean ack; // indicate ack of acceptors
     public int proposalNumber;
-    public Object value;
+    public int numberAccepted;
+    public Object valueAccepted;
 
     // Your constructor and methods here
-    public Response(boolean ack, int proposalNumber, Object value) {
+    public Response(boolean ack, int proposalNumber, int numberAccepted, Object valueAccpeted) {
         this.ack = ack;
         this.proposalNumber = proposalNumber;
-        this.value = value;
+        this.numberAccepted = numberAccepted;
+        this.valueAccepted = valueAccpeted;
     }
 }
