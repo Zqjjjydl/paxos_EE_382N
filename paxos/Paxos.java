@@ -184,18 +184,36 @@ public class Paxos implements PaxosRMI, Runnable{
                 }
             }
             int ackCount = 0;
-            for (Response respons : responses) {
-                if (respons.ack) {
+            int highestNumAccepted = Integer.MIN_VALUE;
+            int highestId = -1;
+            for (int id = 0; id < responses.length; id++) {
+                Response response = responses[id];
+                if (response.ack) {
                     ackCount++;
                 }
+                // find the highest accepted proposal number
+                if (response.numberAccepted > highestNumAccepted) {
+                    highestNumAccepted = response.numberAccepted;
+                    highestId = id;
+                }
             }
+            Object sentValue = curVal;
             if (ackCount >= majority) {
-
+                if (highestNumAccepted > proposalNum) {
+                    sentValue = responses[highestId].valueAccepted;
+                }
                 /* ------------------ phase 2: Accept ------------------ */
+                for (int id = 0; id < peers.length; id++) {
+                    requests[id] = new Request(curSeq, proposalNum, sentValue, id, highestDoneSeq[id]);
+                    if (id == me) {
+                        Accept(requests[id]);
+                    } else {
+                        responses[id] = Call("Accept", requests[id], id);
+                    }
+                }
             }
-
-
             // phase 3: decide
+
         }
 
     }
