@@ -3,9 +3,9 @@ import java.rmi.registry.LocateRegistry;
 import java.rmi.server.UnicastRemoteObject;
 import java.rmi.registry.Registry;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
@@ -26,23 +26,27 @@ public class Paxos implements PaxosRMI, Runnable{
 
     // Your data here
     /*
-    This class contains the Paxos Instance information that needs to be returned.
+    This class contains the Proposal Instance information
     One seq number is corresponding to one agreement instance
      */
     public class Instance {
-        int seq;
+        int proposalNumber;
         Object value;
+        State state; // status of the current proposal
 
-        public Instance(int seq, Object value) {
-            this.seq = seq;
+        public Instance(int proposalNumber, Object value, State state) {
+            this.proposalNumber = proposalNumber;
             this.value = value;
+            state = State.Pending;
         }
     }
 
-    Map<Integer, Instance> instances;
-    int n;
-    int majority;
-
+    Map<Integer, Instance> instanceMap; // agreements
+    int peersNum; // number of peers
+    int majority; // number of majority
+    int curSeq; // current sequence
+    Object curVal;
+    int[] dones; // record the highest number ever passed to Done() on peer
 
     /**
      * Call the constructor to create a Paxos peer.
@@ -59,17 +63,18 @@ public class Paxos implements PaxosRMI, Runnable{
         this.unreliable = new AtomicBoolean(false);
 
         // Your initialization code here
-        n = peers.length;
-        majority = n / 2 + 1;
-        instances = new HashMap<>();
+        peersNum = peers.length;
+        majority = peersNum / 2 + 1;
+        instanceMap = new HashMap<>();
+
 
         // register peers, do not modify this part
-        try{
+        try {
             System.setProperty("java.rmi.server.hostname", this.peers[this.me]);
             registry = LocateRegistry.createRegistry(this.ports[this.me]);
             stub = (PaxosRMI) UnicastRemoteObject.exportObject(this, this.ports[this.me]);
             registry.rebind("Paxos", stub);
-        } catch(Exception e){
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }
@@ -81,29 +86,29 @@ public class Paxos implements PaxosRMI, Runnable{
      * waits for the reply and return a response message if
      * the server responded, and return null if Call() was not
      * be able to contact the server.
-     *
+     * <p>
      * You should assume that Call() will time out and return
      * null after a while if it doesn't get a reply from the server.
-     *
+     * <p>
      * Please use Call() to send all RMIs and please don't change
      * this function.
      */
-    public Response Call(String rmi, Request req, int id){
+    public Response Call(String rmi, Request req, int id) {
         Response callReply = null;
 
         PaxosRMI stub;
-        try{
-            Registry registry=LocateRegistry.getRegistry(this.ports[id]);
-            stub=(PaxosRMI) registry.lookup("Paxos");
-            if(rmi.equals("Prepare"))
+        try {
+            Registry registry = LocateRegistry.getRegistry(this.ports[id]);
+            stub = (PaxosRMI) registry.lookup("Paxos");
+            if (rmi.equals("Prepare"))
                 callReply = stub.Prepare(req);
-            else if(rmi.equals("Accept"))
+            else if (rmi.equals("Accept"))
                 callReply = stub.Accept(req);
-            else if(rmi.equals("Decide"))
+            else if (rmi.equals("Decide"))
                 callReply = stub.Decide(req);
             else
                 System.out.println("Wrong parameters!");
-        } catch(Exception e){
+        } catch (Exception e) {
             return null;
         }
         return callReply;
@@ -114,7 +119,7 @@ public class Paxos implements PaxosRMI, Runnable{
      * The application wants Paxos to start agreement on instance seq,
      * with proposed value v. Start() should start a new thread to run
      * Paxos on instance seq. Multiple instances can be run concurrently.
-     *
+     * <p>
      * Hint: You may start a thread using the runnable interface of
      * Paxos object. One Paxos object may have multiple instances, each
      * instance corresponds to one proposed value/command. Java does not
@@ -122,24 +127,24 @@ public class Paxos implements PaxosRMI, Runnable{
      * in Paxos object before starting a new thread. There is one issue
      * that variable may change before the new thread actually reads it.
      * Test won't fail in this case.
-     *
+     * <p>
      * Start() just starts a new thread to initialize the agreement.
      * The application will call Status() to find out if/when agreement
      * is reached.
      */
-    public void Start(int seq, Object value){
+    public void Start(int seq, Object value) {
         // Your code here
         mutex.lock();
         try {
-            // create new paxos and reset req and v in Paxos object
-            Paxos paxos = new Paxos(me, peers, ports);
-            paxos.instances.put(seq, new Paxos.Instance(seq, value));
-            // start a new thread
-            Thread thread = new Thread(new Paxos(me, peers, ports), seq + "." + me);
-            thread.start();
+            // reset req and v in Paxos object, and pass it to the new Thread
+            this.curSeq = seq;
+            this.curVal = value;
         } finally {
             mutex.unlock();
         }
+        // start a new thread
+        Thread thread = new Thread(this);
+        thread.start();
     }
 
     /**
@@ -148,24 +153,29 @@ public class Paxos implements PaxosRMI, Runnable{
      * request to the acceptors.
      */
     @Override
-    public void run(){
+    public void run() {
         //Your code here
         System.out.println("Start a new Paxos Thread");
-
+        while (Status(this.curSeq).state != State.Decided) {
+            if (this.curSeq < Min()) {
+                return;
+            }
+        }
 
     }
 
     /**
      * Acceptor handle the prepare request and give respond to the server
-     * @param req req(seq, proposalNumber, value)
+     *
+     * @param req req(seq, proposalNumber, valueAccepted)
      * @return respond to the prepare request
      */
     // RMI handler
-    public Response Prepare(Request req){
+    public Response Prepare(Request req) {
         // your code here
         mutex.lock();
         try {
-            // 1. get the value from the client's request
+            // 1. get the valueAccepted from the client's request
             // 2. broadcast the prepare proposal
         } finally {
             mutex.unlock();
@@ -174,18 +184,19 @@ public class Paxos implements PaxosRMI, Runnable{
 
     /**
      * Acceptor handle the accept request and give respond to the server
-     * @param req req(seq, proposalNumber, value)
+     *
+     * @param req req(seq, proposalNumber, valueAccepted)
      * @return respond to the accept request
      */
-    public Response Accept(Request req){
+    public Response Accept(Request req) {
         // your code here
         mutex.lock();
         try {
             // 1. find whether there are old accepted prepare chosen
-            //      1.1 chosen. accept proposal with chosen value
+            //      1.1 chosen. accept proposal with chosen valueAccepted
             //      1.2 not chosen
-            //         1.2.1 new proposer see it: use existing value, all proposal success
-            //         1.2.2 new proposer doesn't see it: new proposer chooses its own value, older proposer blocked
+            //         1.2.1 new proposer see it: use existing valueAccepted, all proposal success
+            //         1.2.2 new proposer doesn't see it: new proposer chooses its own valueAccepted, older proposer blocked
             //
         } finally {
             mutex.unlock();
@@ -194,11 +205,12 @@ public class Paxos implements PaxosRMI, Runnable{
 
     /**
      * Server sends Decide request to all the acceptors. Acceptors need to
-     * change their value to the decided value.
-     * @param req req(seq, proposalNumber, value)
+     * change their valueAccepted to the decided valueAccepted.
+     *
+     * @param req req(seq, proposalNumber, valueAccepted)
      * @return respond to the decide request
      */
-    public Response Decide(Request req){
+    public Response Decide(Request req) {
         // your code here
         mutex.lock();
         try {
@@ -216,11 +228,8 @@ public class Paxos implements PaxosRMI, Runnable{
      */
     public void Done(int seq) {
         // Your code here
-        mutex.lock();
-        try {
-
-        } finally {
-            mutex.unlock();
+        if (dones[me] <= seq) {
+            dones[me] = seq;
         }
     }
 
@@ -234,7 +243,14 @@ public class Paxos implements PaxosRMI, Runnable{
         // Your code here
         mutex.lock();
         try {
-
+            if (instanceMap.isEmpty()) {
+                return -1;
+            }
+            int maxSeq = Integer.MIN_VALUE;
+            for (int seq : instanceMap.keySet()) {
+                maxSeq = Math.max(maxSeq, seq);
+            }
+            return maxSeq;
         } finally {
             mutex.unlock();
         }
@@ -272,12 +288,22 @@ public class Paxos implements PaxosRMI, Runnable{
         // Your code here
         mutex.lock();
         try {
-
+            int minDoneValue = Integer.MAX_VALUE;
+            for (int done : dones) {
+                minDoneValue = Math.min(minDoneValue, done);
+            }
+            Iterator<Map.Entry<Integer, Instance>> iterator = instanceMap.entrySet().iterator();
+            while (iterator.hasNext()) {
+                Map.Entry<Integer, Instance> entry = iterator.next();
+                if (entry.getKey() < minDoneValue) {
+                    iterator.remove();
+                }
+            }
+            return minDoneValue + 1;
         } finally {
             mutex.unlock();
         }
     }
-
 
 
     /**
@@ -291,7 +317,14 @@ public class Paxos implements PaxosRMI, Runnable{
         // Your code here
         mutex.lock();
         try {
-
+            if (seq < Min()) {
+                return new retStatus(State.Forgotten, null);
+            }
+            if (instanceMap.containsKey(seq)) {
+                throw new RuntimeException("No Instance Found");
+            }
+            Instance curIns = instanceMap.get(seq);
+            return new retStatus(curIns.state, curIns.value);
         } finally {
             mutex.unlock();
         }

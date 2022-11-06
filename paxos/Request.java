@@ -14,7 +14,7 @@ public class Request implements Serializable {
     public int proposalNumber;
     public Object value;
     public int me; // indicate which machine sent the request
-    public int highestDone; //
+    public int highestDone; // piggyback the Done value to help other peers to learn
 
     // Your constructor and methods here
     public Request(int seq, int proposalNumber, Object value, int me, int highestDone) {
