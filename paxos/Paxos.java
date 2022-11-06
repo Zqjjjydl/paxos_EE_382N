@@ -35,7 +35,7 @@ public class Paxos implements PaxosRMI, Runnable{
         Object value;
         State state; // status of the current proposal
 
-        public Instance(int proposalNumber, Object value, State state) {
+        public Instance(int proposalNumber, Object value) {
             this.proposalNumber = proposalNumber;
             this.value = value;
             state = State.Pending;
@@ -268,8 +268,9 @@ public class Paxos implements PaxosRMI, Runnable{
         // your code here
         mutex.lock();
         try {
-            highestDoneSeq[req.me] = req.highestDone;
             int n = req.proposalNumber;
+            instanceMap.put(req.seq, new Instance(n, null));
+            highestDoneSeq[req.me] = req.highestDone;
             if (n > minProposal) {
                 minProposal = n;
                 return new Response(true, n, -1, null);
@@ -292,6 +293,10 @@ public class Paxos implements PaxosRMI, Runnable{
         mutex.lock();
         try {
             int n = req.proposalNumber;
+            Instance curIns = instanceMap.get(req.seq);
+            curIns.value = req.value;
+            instanceMap.put(req.seq, curIns);
+            highestDoneSeq[req.me] = req.highestDone;
             if (n >= minProposal) {
                 minProposal = n;
                 Response response = new Response(true);
@@ -308,7 +313,7 @@ public class Paxos implements PaxosRMI, Runnable{
 
     /**
      * Server sends Decide request to all the acceptors. Acceptors need to
-     * change their valueAccepted to the decided valueAccepted.
+     * change their value to the decided value.
      *
      * @param req req(seq, proposalNumber, valueAccepted)
      * @return respond to the decide request
@@ -317,7 +322,11 @@ public class Paxos implements PaxosRMI, Runnable{
         // your code here
         mutex.lock();
         try {
-            return new Response(false);
+            highestDoneSeq[req.me] = req.highestDone;
+            Instance curIns = instanceMap.get(req.seq);
+            curIns.value = req.value;
+            curIns.state = State.Decided;
+            return new Response(true);
         } finally {
             mutex.unlock();
         }
@@ -423,8 +432,8 @@ public class Paxos implements PaxosRMI, Runnable{
             if (seq < Min()) {
                 return new retStatus(State.Forgotten, null);
             }
-            if (instanceMap.containsKey(seq)) {
-                throw new RuntimeException("No Instance Found");
+            if (!instanceMap.containsKey(seq)) {
+                return new retStatus(State.Forgotten, null);
             }
             Instance curIns = instanceMap.get(seq);
             return new retStatus(curIns.state, curIns.value);
