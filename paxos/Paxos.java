@@ -174,13 +174,13 @@ public class Paxos implements PaxosRMI, Runnable{
             // sent prepare(n) to all servers and get the Response
             Request[] requests = new Request[peers.length];
             Response[] responses = new Response[peers.length];
+            Request newReq = new Request(curSeq, proposalNum, null, me, highestDoneSeq[me]);
             for (int id = 0; id < peers.length; id++) {
-                requests[id] = new Request(curSeq, proposalNum, null, id, highestDoneSeq[id]);
                 // local peer: no need to send rmi call
                 if (id == me) {
-                    Prepare(requests[id]);
+                    Prepare(newReq);
                 } else {
-                    responses[id] = Call("Prepare", requests[id], id);
+                    responses[id] = Call("Prepare", newReq, id);
                 }
             }
             int ackCount = 0;
@@ -203,17 +203,32 @@ public class Paxos implements PaxosRMI, Runnable{
                     sentValue = responses[highestId].valueAccepted;
                 }
                 /* ------------------ phase 2: Accept ------------------ */
+                newReq = new Request(curSeq, proposalNum, sentValue, me, highestDoneSeq[me]);
                 for (int id = 0; id < peers.length; id++) {
-                    requests[id] = new Request(curSeq, proposalNum, sentValue, id, highestDoneSeq[id]);
                     if (id == me) {
-                        Accept(requests[id]);
+                        Accept(newReq);
                     } else {
-                        responses[id] = Call("Accept", requests[id], id);
+                        responses[id] = Call("Accept", newReq, id);
                     }
                 }
             }
-            // phase 3: decide
-
+            // /* ------------------ phase 3:  ------------------ */
+            ackCount = 0;
+            for (Response respons : responses) {
+                if (respons.ack) {
+                    ackCount++;
+                }
+            }
+            if (ackCount >= majority) {
+                newReq = new Request(curSeq, proposalNum, sentValue, me, highestDoneSeq[me]);
+                for (int id = 0; id < peers.length; id++) {
+                    if (id == me) {
+                        Decide(newReq);
+                    } else {
+                        responses[id] = Call("Decide", newReq, id);
+                    }
+                }
+            }
         }
 
     }
