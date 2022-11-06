@@ -15,6 +15,10 @@ public class Response implements Serializable {
     public Object valueAccepted;
 
     // Your constructor and methods here
+    public Response(boolean ack) {
+        this.ack = ack;
+    }
+
     public Response(boolean ack, int proposalNumber, int numberAccepted, Object valueAccpeted) {
         this.ack = ack;
         this.proposalNumber = proposalNumber;
