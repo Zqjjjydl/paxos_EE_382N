@@ -188,6 +188,10 @@ public class Paxos implements PaxosRMI, Runnable{
             int highestId = -1;
             for (int id = 0; id < responses.length; id++) {
                 Response response = responses[id];
+                if (response == null) {
+                    continue;
+                }
+                highestNumSeen = Math.max(highestId, Math.max(response.numberAccepted, response.proposalNumber));
                 if (response.ack) {
                     ackCount++;
                 }
@@ -199,7 +203,8 @@ public class Paxos implements PaxosRMI, Runnable{
             }
             Object sentValue = curVal;
             if (ackCount >= majority) {
-                if (highestNumAccepted > proposalNum) {
+                // if any NumAccepted received
+                if (highestNumAccepted >= 0) {
                     sentValue = responses[highestId].valueAccepted;
                 }
                 /* ------------------ phase 2: Accept ------------------ */
@@ -214,12 +219,30 @@ public class Paxos implements PaxosRMI, Runnable{
             }
             // /* ------------------ phase 3:  ------------------ */
             ackCount = 0;
-            for (Response respons : responses) {
-                if (respons.ack) {
+            for (Response response : responses) {
+                if (response == null) {
+                    continue;
+                }
+                highestNumSeen = Math.max(highestId, Math.max(response.numberAccepted, response.proposalNumber));
+                if (response.ack) {
                     ackCount++;
                 }
             }
+            boolean continueFlag = false;
             if (ackCount >= majority) {
+                for (Response response : responses) {
+                    if (response == null) {
+                        continue;
+                    }
+                    highestNumSeen = Math.max(highestId, Math.max(response.numberAccepted, response.proposalNumber));
+                    if (!response.ack && response.proposalNumber > proposalNum) {
+                        continueFlag = true;
+                        break;
+                    }
+                }
+                if (continueFlag) {
+                    continue;
+                }
                 newReq = new Request(curSeq, proposalNum, sentValue, me, highestDoneSeq[me]);
                 for (int id = 0; id < peers.length; id++) {
                     if (id == me) {
