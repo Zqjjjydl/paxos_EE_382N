@@ -131,7 +131,10 @@ public class Paxos implements PaxosRMI, Runnable{
         // Your code here
         mutex.lock();
         try {
-            // 1. start a new thread
+            // create new paxos and reset req and v in Paxos object
+            Paxos paxos = new Paxos(me, peers, ports);
+            paxos.instances.put(seq, new Paxos.Instance(seq, value));
+            // start a new thread
             Thread thread = new Thread(new Paxos(me, peers, ports), seq + "." + me);
             thread.start();
         } finally {
@@ -139,12 +142,24 @@ public class Paxos implements PaxosRMI, Runnable{
         }
     }
 
+    /**
+     * In this run function, server lead the phase 1 (prepare) and
+     * phase 2 (accept) of the algorithm. The server send prepare and accept
+     * request to the acceptors.
+     */
     @Override
     public void run(){
         //Your code here
         System.out.println("Start a new Paxos Thread");
+
+
     }
 
+    /**
+     * Acceptor handle the prepare request and give respond to the server
+     * @param req req(seq, proposalNumber, value)
+     * @return respond to the prepare request
+     */
     // RMI handler
     public Response Prepare(Request req){
         // your code here
@@ -157,6 +172,11 @@ public class Paxos implements PaxosRMI, Runnable{
         }
     }
 
+    /**
+     * Acceptor handle the accept request and give respond to the server
+     * @param req req(seq, proposalNumber, value)
+     * @return respond to the accept request
+     */
     public Response Accept(Request req){
         // your code here
         mutex.lock();
@@ -172,6 +192,12 @@ public class Paxos implements PaxosRMI, Runnable{
         }
     }
 
+    /**
+     * Server sends Decide request to all the acceptors. Acceptors need to
+     * change their value to the decided value.
+     * @param req req(seq, proposalNumber, value)
+     * @return respond to the decide request
+     */
     public Response Decide(Request req){
         // your code here
         mutex.lock();
