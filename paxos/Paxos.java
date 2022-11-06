@@ -2,7 +2,10 @@ package paxos;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.server.UnicastRemoteObject;
 import java.rmi.registry.Registry;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
@@ -22,6 +25,23 @@ public class Paxos implements PaxosRMI, Runnable{
     AtomicBoolean unreliable;// for testing
 
     // Your data here
+    /*
+    This class contains the Paxos Instance information that needs to be returned.
+    One seq number is corresponding to one agreement instance
+     */
+    public class Instance {
+        int seq;
+        Object value;
+
+        public Instance(int seq, Object value) {
+            this.seq = seq;
+            this.value = value;
+        }
+    }
+
+    Map<Integer, Instance> instances;
+    int n;
+    int majority;
 
 
     /**
@@ -39,7 +59,9 @@ public class Paxos implements PaxosRMI, Runnable{
         this.unreliable = new AtomicBoolean(false);
 
         // Your initialization code here
-
+        n = peers.length;
+        majority = n / 2 + 1;
+        instances = new HashMap<>();
 
         // register peers, do not modify this part
         try{
@@ -107,27 +129,57 @@ public class Paxos implements PaxosRMI, Runnable{
      */
     public void Start(int seq, Object value){
         // Your code here
+        mutex.lock();
+        try {
+            // 1. start a new thread
+            Thread thread = new Thread(new Paxos(me, peers, ports), seq + "." + me);
+            thread.start();
+        } finally {
+            mutex.unlock();
+        }
     }
 
     @Override
     public void run(){
         //Your code here
+        System.out.println("Start a new Paxos Thread");
     }
 
     // RMI handler
     public Response Prepare(Request req){
         // your code here
-
+        mutex.lock();
+        try {
+            // 1. get the value from the client's request
+            // 2. broadcast the prepare proposal
+        } finally {
+            mutex.unlock();
+        }
     }
 
     public Response Accept(Request req){
         // your code here
-
+        mutex.lock();
+        try {
+            // 1. find whether there are old accepted prepare chosen
+            //      1.1 chosen. accept proposal with chosen value
+            //      1.2 not chosen
+            //         1.2.1 new proposer see it: use existing value, all proposal success
+            //         1.2.2 new proposer doesn't see it: new proposer chooses its own value, older proposer blocked
+            //
+        } finally {
+            mutex.unlock();
+        }
     }
 
     public Response Decide(Request req){
         // your code here
+        mutex.lock();
+        try {
 
+        } finally {
+            mutex.unlock();
+        }
     }
 
     /**
@@ -138,6 +190,12 @@ public class Paxos implements PaxosRMI, Runnable{
      */
     public void Done(int seq) {
         // Your code here
+        mutex.lock();
+        try {
+
+        } finally {
+            mutex.unlock();
+        }
     }
 
 
@@ -148,6 +206,12 @@ public class Paxos implements PaxosRMI, Runnable{
      */
     public int Max(){
         // Your code here
+        mutex.lock();
+        try {
+
+        } finally {
+            mutex.unlock();
+        }
     }
 
     /**
@@ -180,7 +244,12 @@ public class Paxos implements PaxosRMI, Runnable{
      */
     public int Min(){
         // Your code here
+        mutex.lock();
+        try {
 
+        } finally {
+            mutex.unlock();
+        }
     }
 
 
@@ -194,7 +263,12 @@ public class Paxos implements PaxosRMI, Runnable{
      */
     public retStatus Status(int seq){
         // Your code here
+        mutex.lock();
+        try {
 
+        } finally {
+            mutex.unlock();
+        }
     }
 
     /**
