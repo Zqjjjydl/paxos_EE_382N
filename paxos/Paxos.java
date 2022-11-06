@@ -173,7 +173,7 @@ public class Paxos implements PaxosRMI, Runnable{
             // choose a unique and higher proposal number
             proposalNum = highestNumSeen + 1;
             highestNumSeen = proposalNum;
-            // sent prepare(n) to all servers and get the Response]
+            // sent prepare(n) to all servers and get the Response
             Response[] responses = new Response[peersNum];
             Request newReq = new Request(curSeq, proposalNum, null, me, highestDoneSeq[me]);
             for (int id = 0; id < this.peersNum; id++) {
@@ -291,13 +291,16 @@ public class Paxos implements PaxosRMI, Runnable{
         // your code here
         mutex.lock();
         try {
-            // 1. find whether there are old accepted prepare chosen
-            //      1.1 chosen. accept proposal with chosen valueAccepted
-            //      1.2 not chosen
-            //         1.2.1 new proposer see it: use existing valueAccepted, all proposal success
-            //         1.2.2 new proposer doesn't see it: new proposer chooses its own valueAccepted, older proposer blocked
-            //
-            return new Response(false);
+            int n = req.proposalNumber;
+            if (n >= minProposal) {
+                minProposal = n;
+                Response response = new Response(true);
+                response.numberAccepted = n;
+                response.valueAccepted = req.value;
+                return response;
+            } else {
+                return new Response(false);
+            }
         } finally {
             mutex.unlock();
         }
