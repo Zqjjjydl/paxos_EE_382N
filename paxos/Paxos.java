@@ -2,6 +2,7 @@ package paxos;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.server.UnicastRemoteObject;
 import java.rmi.registry.Registry;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -46,7 +47,7 @@ public class Paxos implements PaxosRMI, Runnable{
     int majority; // number of majority
     int curSeq; // current sequence
     Object curVal;
-    int[] dones; // record the highest number ever passed to Done() on peer
+    int[] highestDoneSeq; // record the highest number ever passed to Done() on all peers
 
     /**
      * Call the constructor to create a Paxos peer.
@@ -66,7 +67,10 @@ public class Paxos implements PaxosRMI, Runnable{
         peersNum = peers.length;
         majority = peersNum / 2 + 1;
         instanceMap = new HashMap<>();
-
+        curSeq = -1;
+        curVal = null;
+        highestDoneSeq = new int[peersNum];
+        Arrays.fill(highestDoneSeq, -1);
 
         // register peers, do not modify this part
         try {
@@ -149,23 +153,55 @@ public class Paxos implements PaxosRMI, Runnable{
 
     /**
      * In this run function, server lead the phase 1 (prepare) and
-     * phase 2 (accept) of the algorithm. The server send prepare and accept
-     * request to the acceptors.
+     * phase 2 (accept) of the algorithm as a proposer. The server send prepare
+     * and accept request to the acceptors.
      */
     @Override
     public void run() {
         //Your code here
+        int proposalNum = 0;
+        // increase in the loop
+        int highestNumSeen = 0;
         System.out.println("Start a new Paxos Thread");
         while (Status(this.curSeq).state != State.Decided) {
             if (this.curSeq < Min()) {
                 return;
             }
+            /* ------------------ phase 1: Prepare ------------------ */
+            // choose a unique and higher proposal number
+            proposalNum = highestNumSeen + 1;
+            highestNumSeen = proposalNum;
+            // sent prepare(n) to all servers and get the Response
+            Request[] requests = new Request[peers.length];
+            Response[] responses = new Response[peers.length];
+            for (int id = 0; id < peers.length; id++) {
+                requests[id] = new Request(curSeq, proposalNum, null, id, highestDoneSeq[id]);
+                // local peer: no need to send rmi call
+                if (id == me) {
+                    Prepare(requests[id]);
+                } else {
+                    responses[id] = Call("Prepare", requests[id], id);
+                }
+            }
+            int ackCount = 0;
+            for (Response respons : responses) {
+                if (respons.ack) {
+                    ackCount++;
+                }
+            }
+            if (ackCount >= majority) {
+
+                /* ------------------ phase 2: Accept ------------------ */
+            }
+
+
+            // phase 3: decide
         }
 
     }
 
     /**
-     * Acceptor handle the prepare request and give respond to the server
+     * Acceptor handle the prepare request and give respond to the Proposer
      *
      * @param req req(seq, proposalNumber, valueAccepted)
      * @return respond to the prepare request
@@ -228,8 +264,8 @@ public class Paxos implements PaxosRMI, Runnable{
      */
     public void Done(int seq) {
         // Your code here
-        if (dones[me] <= seq) {
-            dones[me] = seq;
+        if (highestDoneSeq[me] <= seq) {
+            highestDoneSeq[me] = seq;
         }
     }
 
@@ -289,7 +325,7 @@ public class Paxos implements PaxosRMI, Runnable{
         mutex.lock();
         try {
             int minDoneValue = Integer.MAX_VALUE;
-            for (int done : dones) {
+            for (int done : highestDoneSeq) {
                 minDoneValue = Math.min(minDoneValue, done);
             }
             Iterator<Map.Entry<Integer, Instance>> iterator = instanceMap.entrySet().iterator();
