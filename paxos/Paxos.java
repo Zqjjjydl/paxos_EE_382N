@@ -46,6 +46,7 @@ public class Paxos implements PaxosRMI, Runnable{
     int peersNum; // number of peers
     int majority; // number of majority
     int curSeq; // current sequence
+    int minProposal; // the highest prepare seen
     Object curVal;
     int[] highestDoneSeq; // record the highest number ever passed to Done() on all peers
 
@@ -68,6 +69,7 @@ public class Paxos implements PaxosRMI, Runnable{
         majority = peersNum / 2 + 1;
         instanceMap = new HashMap<>();
         curSeq = -1;
+        minProposal = -1;
         curVal = null;
         highestDoneSeq = new int[peersNum];
         Arrays.fill(highestDoneSeq, -1);
@@ -171,11 +173,10 @@ public class Paxos implements PaxosRMI, Runnable{
             // choose a unique and higher proposal number
             proposalNum = highestNumSeen + 1;
             highestNumSeen = proposalNum;
-            // sent prepare(n) to all servers and get the Response
-            Request[] requests = new Request[peers.length];
-            Response[] responses = new Response[peers.length];
+            // sent prepare(n) to all servers and get the Response]
+            Response[] responses = new Response[peersNum];
             Request newReq = new Request(curSeq, proposalNum, null, me, highestDoneSeq[me]);
-            for (int id = 0; id < peers.length; id++) {
+            for (int id = 0; id < this.peersNum; id++) {
                 // local peer: no need to send rmi call
                 if (id == me) {
                     Prepare(newReq);
@@ -267,8 +268,14 @@ public class Paxos implements PaxosRMI, Runnable{
         // your code here
         mutex.lock();
         try {
-            // 1. get the valueAccepted from the client's request
-            // 2. broadcast the prepare proposal
+            highestDoneSeq[req.me] = req.highestDone;
+            int n = req.proposalNumber;
+            if (n > minProposal) {
+                minProposal = n;
+                return new Response(true, n, -1, null);
+            } else {
+                return new Response(false);
+            }
         } finally {
             mutex.unlock();
         }
@@ -290,6 +297,7 @@ public class Paxos implements PaxosRMI, Runnable{
             //         1.2.1 new proposer see it: use existing valueAccepted, all proposal success
             //         1.2.2 new proposer doesn't see it: new proposer chooses its own valueAccepted, older proposer blocked
             //
+            return new Response(false);
         } finally {
             mutex.unlock();
         }
@@ -306,7 +314,7 @@ public class Paxos implements PaxosRMI, Runnable{
         // your code here
         mutex.lock();
         try {
-
+            return new Response(false);
         } finally {
             mutex.unlock();
         }
