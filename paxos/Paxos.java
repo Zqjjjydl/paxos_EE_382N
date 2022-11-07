@@ -32,18 +32,30 @@ public class Paxos implements PaxosRMI, Runnable{
      */
     public class Instance {
         int minProposal;
+        int highestAcceptedProposal;
         Object value;
         State state; // status of the current proposal
 
-        public Instance(int minProposal, Object value) {
+        public Instance(int minProposal,int highestAcceptedProposal, Object value) {
             this.minProposal = minProposal;  // the highest prepare seen
+            this.highestAcceptedProposal=highestAcceptedProposal;
             this.value = value;
             state = State.Pending;
         }
     }
 
+    public class proposerParameter{
+        int seqId;
+        Object value;
+
+        public proposerParameter(int seqId,Object value){
+            this.seqId=seqId;
+            this.value=value;
+        }
+    }
+
     Map<Integer, Instance> instanceMap; // agreements
-    HashMap<Long,Pair<Integer,Object>> threadname2ProposerParameter;//key is thread name, value is proposer parameter, including seq id and value
+    HashMap<Long,proposerParameter> threadId2ProposerParameter;//key is thread name, value is proposer parameter, including seq id and value
     int peersNum; // number of peers
     int majority; // number of majority
 
@@ -70,7 +82,7 @@ public class Paxos implements PaxosRMI, Runnable{
         peersNum = peers.length;
         majority = peersNum / 2 + 1;
         instanceMap = new HashMap<>();
-        threadname2ProposerParameter=new HashMap<Long,Pair<Integer,Object>>();
+        threadId2ProposerParameter=new HashMap<Long,proposerParameter>();
         highestDoneSeq = new int[peersNum];
         Arrays.fill(highestDoneSeq, -1);
 
@@ -146,7 +158,7 @@ public class Paxos implements PaxosRMI, Runnable{
         mutex.lock();
         try {
             // reset req and v in Paxos object, and pass it to the new Thread
-            this.threadname2ProposerParameter.put(thread.getId(),new Pair<Integer,Object>(seq,value));
+            this.threadId2ProposerParameter.put(thread.getId(),new proposerParameter(seq,value));
         } finally {
             mutex.unlock();
         }
@@ -165,16 +177,16 @@ public class Paxos implements PaxosRMI, Runnable{
         // increase in the loop
         int highestNumSeen = 0;
         System.out.println("Start a new Paxos Thread");
-        Pair<Integer,Object> proposerParameter=this.threadname2ProposerParameter.get(Thread.currentThread().getId());
-        int curSeq=proposerParameter.getKey();
-        Object curVal=proposerParameter.getValue();
+        proposerParameter proposerParameter=this.threadId2ProposerParameter.get(Thread.currentThread().getId());
+        int curSeq=proposerParameter.seqId;
+        Object curVal=proposerParameter.value;
         while (Status(curSeq).state != State.Decided) {
             if (curSeq < Min()) {
                 return;
             }
             /* ------------------ phase 1: Prepare ------------------ */
             // choose a unique and higher proposal number
-            proposalNum = highestNumSeen + 1;
+            proposalNum = ((highestNumSeen + 1 + this.peersNum)/this.peersNum)*this.peersNum + me;
             highestNumSeen = proposalNum;
             // sent prepare(n) to all servers and get the Response
             Response[] responses = new Response[peersNum];
@@ -196,7 +208,7 @@ public class Paxos implements PaxosRMI, Runnable{
                 if (response == null) {
                     continue;
                 }
-                highestNumSeen = Math.max(highestId, Math.max(response.numberAccepted, response.proposalNumber));
+                highestNumSeen = Math.max(highestNumSeen, Math.max(response.numberAccepted, response.proposalNumber));
                 if (response.ack) {
                     ackCount++;
                 }
@@ -230,7 +242,7 @@ public class Paxos implements PaxosRMI, Runnable{
                 if (response == null) {
                     continue;
                 }
-//                highestNumSeen = Math.max(highestId, Math.max(response.numberAccepted, response.proposalNumber));
+                highestNumSeen = Math.max(highestNumSeen, Math.max(response.numberAccepted, response.proposalNumber));
                 if (response.ack) {
                     ackCount++;
                 }
@@ -243,7 +255,7 @@ public class Paxos implements PaxosRMI, Runnable{
                     if (response == null) {
                         continue;
                     }
-//                    highestNumSeen = Math.max(highestId, Math.max(response.numberAccepted, response.proposalNumber));
+                    highestNumSeen = Math.max(highestNumSeen, Math.max(response.numberAccepted, response.proposalNumber));
                     if (!response.ack && response.proposalNumber > proposalNum) {
                         continueFlag = true;
                         break;
@@ -278,13 +290,13 @@ public class Paxos implements PaxosRMI, Runnable{
         try {
             int n = req.proposalNumber;
             if (instanceMap.get(req.seq) == null) {
-                instanceMap.put(req.seq, new Instance(-1, null));
+                instanceMap.put(req.seq, new Instance(-1,-1, null));
             }
             Instance curIns = instanceMap.get(req.seq);
             highestDoneSeq[req.me] = req.highestDone;
             if (n > curIns.minProposal) {
                 curIns.minProposal = n;
-                return new Response(true, n, -1, null);
+                return new Response(true, n, curIns.highestAcceptedProposal, curIns.value);
             } else {
                 return new Response(false);
             }
@@ -305,11 +317,12 @@ public class Paxos implements PaxosRMI, Runnable{
         try {
             int n = req.proposalNumber;
             Instance curIns = instanceMap.get(req.seq);
-            curIns.value = req.value;
             instanceMap.put(req.seq, curIns);
             highestDoneSeq[req.me] = req.highestDone;
             if (n >= curIns.minProposal) {
                 curIns.minProposal = n;
+                curIns.highestAcceptedProposal = n;
+                curIns.value = req.value;
                 return new Response(true, n, n, req.value);
             } else {
                 return new Response(false);
