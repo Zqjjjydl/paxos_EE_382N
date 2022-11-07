@@ -31,12 +31,12 @@ public class Paxos implements PaxosRMI, Runnable{
     One seq number is corresponding to one agreement instance
      */
     public class Instance {
-        int proposalNumber;
+        int minProposal;
         Object value;
         State state; // status of the current proposal
 
-        public Instance(int proposalNumber, Object value) {
-            this.proposalNumber = proposalNumber;
+        public Instance(int minProposal, Object value) {
+            this.minProposal = minProposal;  // the highest prepare seen
             this.value = value;
             state = State.Pending;
         }
@@ -46,7 +46,6 @@ public class Paxos implements PaxosRMI, Runnable{
     int peersNum; // number of peers
     int majority; // number of majority
     int curSeq; // current sequence
-    int minProposal; // the highest prepare seen
     Object curVal;
     int[] highestDoneSeq; // record the highest number ever passed to Done() on all peers
 
@@ -69,7 +68,6 @@ public class Paxos implements PaxosRMI, Runnable{
         majority = peersNum / 2 + 1;
         instanceMap = new HashMap<>();
         curSeq = -1;
-        minProposal = -1;
         curVal = null;
         highestDoneSeq = new int[peersNum];
         Arrays.fill(highestDoneSeq, -1);
@@ -179,7 +177,7 @@ public class Paxos implements PaxosRMI, Runnable{
             for (int id = 0; id < this.peersNum; id++) {
                 // local peer: no need to send rmi call
                 if (id == me) {
-                    Prepare(newReq);
+                    responses[id] = Prepare(newReq);
                 } else {
                     responses[id] = Call("Prepare", newReq, id);
                 }
@@ -203,16 +201,18 @@ public class Paxos implements PaxosRMI, Runnable{
                 }
             }
             Object sentValue = curVal;
-            if (ackCount >= majority) {
+            if (ackCount < majority) {
+                continue;
+            } else {
                 // if any NumAccepted received
-                if (highestNumAccepted >= 0) {
+                if (highestNumAccepted >= 1) {
                     sentValue = responses[highestId].valueAccepted;
                 }
                 /* ------------------ phase 2: Accept ------------------ */
                 newReq = new Request(curSeq, proposalNum, sentValue, me, highestDoneSeq[me]);
-                for (int id = 0; id < peers.length; id++) {
+                for (int id = 0; id < peersNum; id++) {
                     if (id == me) {
-                        Accept(newReq);
+                        responses[id] = Accept(newReq);
                     } else {
                         responses[id] = Call("Accept", newReq, id);
                     }
@@ -224,18 +224,20 @@ public class Paxos implements PaxosRMI, Runnable{
                 if (response == null) {
                     continue;
                 }
-                highestNumSeen = Math.max(highestId, Math.max(response.numberAccepted, response.proposalNumber));
+//                highestNumSeen = Math.max(highestId, Math.max(response.numberAccepted, response.proposalNumber));
                 if (response.ack) {
                     ackCount++;
                 }
             }
             boolean continueFlag = false;
-            if (ackCount >= majority) {
+            if (ackCount < majority) {
+                continue;
+            } else {
                 for (Response response : responses) {
                     if (response == null) {
                         continue;
                     }
-                    highestNumSeen = Math.max(highestId, Math.max(response.numberAccepted, response.proposalNumber));
+//                    highestNumSeen = Math.max(highestId, Math.max(response.numberAccepted, response.proposalNumber));
                     if (!response.ack && response.proposalNumber > proposalNum) {
                         continueFlag = true;
                         break;
@@ -245,9 +247,9 @@ public class Paxos implements PaxosRMI, Runnable{
                     continue;
                 }
                 newReq = new Request(curSeq, proposalNum, sentValue, me, highestDoneSeq[me]);
-                for (int id = 0; id < peers.length; id++) {
+                for (int id = 0; id < peersNum; id++) {
                     if (id == me) {
-                        Decide(newReq);
+                        responses[id] = Decide(newReq);
                     } else {
                         responses[id] = Call("Decide", newReq, id);
                     }
@@ -269,10 +271,13 @@ public class Paxos implements PaxosRMI, Runnable{
         mutex.lock();
         try {
             int n = req.proposalNumber;
-            instanceMap.put(req.seq, new Instance(n, null));
+            if (instanceMap.get(req.seq) == null) {
+                instanceMap.put(req.seq, new Instance(-1, null));
+            }
+            Instance curIns = instanceMap.get(req.seq);
             highestDoneSeq[req.me] = req.highestDone;
-            if (n > minProposal) {
-                minProposal = n;
+            if (n > curIns.minProposal) {
+                curIns.minProposal = n;
                 return new Response(true, n, -1, null);
             } else {
                 return new Response(false);
@@ -297,12 +302,9 @@ public class Paxos implements PaxosRMI, Runnable{
             curIns.value = req.value;
             instanceMap.put(req.seq, curIns);
             highestDoneSeq[req.me] = req.highestDone;
-            if (n >= minProposal) {
-                minProposal = n;
-                Response response = new Response(true);
-                response.numberAccepted = n;
-                response.valueAccepted = req.value;
-                return response;
+            if (n >= curIns.minProposal) {
+                curIns.minProposal = n;
+                return new Response(true, n, n, req.value);
             } else {
                 return new Response(false);
             }
@@ -340,8 +342,13 @@ public class Paxos implements PaxosRMI, Runnable{
      */
     public void Done(int seq) {
         // Your code here
-        if (highestDoneSeq[me] <= seq) {
-            highestDoneSeq[me] = seq;
+        mutex.lock();
+        try {
+            if (highestDoneSeq[me] <= seq) {
+                highestDoneSeq[me] = seq;
+            }
+        } finally {
+            mutex.unlock();
         }
     }
 
@@ -433,7 +440,7 @@ public class Paxos implements PaxosRMI, Runnable{
                 return new retStatus(State.Forgotten, null);
             }
             if (!instanceMap.containsKey(seq)) {
-                return new retStatus(State.Forgotten, null);
+                return new retStatus(State.Pending, null);
             }
             Instance curIns = instanceMap.get(seq);
             return new retStatus(curIns.state, curIns.value);
