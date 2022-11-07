@@ -8,7 +8,7 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
-
+import javafx.util.Pair;
 /**
  * This class is the main class you need to implement paxos instances.
  */
@@ -43,10 +43,13 @@ public class Paxos implements PaxosRMI, Runnable{
     }
 
     Map<Integer, Instance> instanceMap; // agreements
+    HashMap<Long,Pair<Integer,Object>> threadname2ProposerParameter;//key is thread name, value is proposer parameter, including seq id and value
     int peersNum; // number of peers
     int majority; // number of majority
-    int curSeq; // current sequence
-    Object curVal;
+
+    //these variables are replaced by threadname2ProposerParameter
+//    int curSeq; // current sequence
+//    Object curVal;
     int[] highestDoneSeq; // record the highest number ever passed to Done() on all peers
 
     /**
@@ -67,8 +70,7 @@ public class Paxos implements PaxosRMI, Runnable{
         peersNum = peers.length;
         majority = peersNum / 2 + 1;
         instanceMap = new HashMap<>();
-        curSeq = -1;
-        curVal = null;
+        threadname2ProposerParameter=new HashMap<Long,Pair<Integer,Object>>();
         highestDoneSeq = new int[peersNum];
         Arrays.fill(highestDoneSeq, -1);
 
@@ -138,16 +140,16 @@ public class Paxos implements PaxosRMI, Runnable{
      */
     public void Start(int seq, Object value) {
         // Your code here
+
+        // start a new thread
+        Thread thread = new Thread(this,Integer.toString(seq));
         mutex.lock();
         try {
             // reset req and v in Paxos object, and pass it to the new Thread
-            this.curSeq = seq;
-            this.curVal = value;
+            this.threadname2ProposerParameter.put(thread.getId(),new Pair<Integer,Object>(seq,value));
         } finally {
             mutex.unlock();
         }
-        // start a new thread
-        Thread thread = new Thread(this);
         thread.start();
     }
 
@@ -163,8 +165,11 @@ public class Paxos implements PaxosRMI, Runnable{
         // increase in the loop
         int highestNumSeen = 0;
         System.out.println("Start a new Paxos Thread");
-        while (Status(this.curSeq).state != State.Decided) {
-            if (this.curSeq < Min()) {
+        Pair<Integer,Object> proposerParameter=this.threadname2ProposerParameter.get(Thread.currentThread().getId());
+        int curSeq=proposerParameter.getKey();
+        Object curVal=proposerParameter.getValue();
+        while (Status(curSeq).state != State.Decided) {
+            if (curSeq < Min()) {
                 return;
             }
             /* ------------------ phase 1: Prepare ------------------ */
@@ -173,6 +178,7 @@ public class Paxos implements PaxosRMI, Runnable{
             highestNumSeen = proposalNum;
             // sent prepare(n) to all servers and get the Response
             Response[] responses = new Response[peersNum];
+
             Request newReq = new Request(curSeq, proposalNum, null, me, highestDoneSeq[me]);
             for (int id = 0; id < this.peersNum; id++) {
                 // local peer: no need to send rmi call
