@@ -180,7 +180,7 @@ public class Paxos implements PaxosRMI, Runnable{
         proposerParameter proposerParameter=this.threadId2ProposerParameter.get(Thread.currentThread().getId());
         int curSeq=proposerParameter.seqId;
         Object curVal=proposerParameter.value;
-        while (Status(curSeq).state != State.Decided) {
+        while (!this.isDead()&&Status(curSeq).state != State.Decided) {
             if (curSeq < Min()) {
                 return;
             }
