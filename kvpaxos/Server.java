@@ -61,36 +61,48 @@ public class Server implements KVPaxosRMI {
     // RMI handlers
     public Response Get(Request req){
         // Your code here
-        while(true){
-            this.px.Start(this.nextSeqIdx,req.operation);
-            Op decidedOperation=wait(this.nextSeqIdx);
-            this.nextSeqIdx++;
-            if(decidedOperation==null){
-                break;
+        mutex.lock();
+        try {
+            while (true) {
+                this.px.Start(this.nextSeqIdx, req.operation);
+                Op decidedOperation = wait(this.nextSeqIdx);
+                this.nextSeqIdx++;
+                if (decidedOperation == null) {
+                    break;
+                }
+                applyOperation(decidedOperation);
+                if (decidedOperation.equals(req.operation)) {
+                    return new Response(true, this.stateMachine.get(req.operation.key));
+                }
             }
-            applyOperation(decidedOperation);
-            if(decidedOperation.equals(req.operation)){
-                return new Response(true,this.stateMachine.get(req.operation.key));
-            }
+            return new Response(false,-1);
         }
-        return new Response(false,-1);
+        finally {
+            mutex.unlock();
+        }
     }
 
     public Response Put(Request req){
         // Your code here
-        while(true){
-            this.px.Start(this.nextSeqIdx,req.operation);
-            Op decidedOperation=wait(this.nextSeqIdx);
-            this.nextSeqIdx++;
-            if(decidedOperation==null){
-                break;
+        mutex.lock();
+        try {
+            while (true) {
+                this.px.Start(this.nextSeqIdx, req.operation);
+                Op decidedOperation = wait(this.nextSeqIdx);
+                this.nextSeqIdx++;
+                if (decidedOperation == null) {
+                    break;
+                }
+                applyOperation(decidedOperation);
+                if (decidedOperation.equals(req.operation)) {
+                    return new Response(true, -1);
+                }
             }
-            applyOperation(decidedOperation);
-            if(decidedOperation.equals(req.operation)){
-                return new Response(true,-1);
-            }
+            return new Response(false, -1);
         }
-        return new Response(false,-1);
+        finally {
+            mutex.unlock();
+        }
     }
 
     public Op wait(int seq){
