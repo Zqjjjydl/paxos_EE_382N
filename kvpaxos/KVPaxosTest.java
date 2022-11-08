@@ -81,4 +81,37 @@ public class KVPaxosTest {
         System.out.println("... Passed");
 
     }
+
+    @Test
+    public void TestForget(){
+        final int npaxos = 5;
+        String host = "127.0.0.1";
+        String[] peers = new String[npaxos];
+        int[] ports = new int[npaxos];
+
+        Server[] kva = new Server[npaxos];
+        for(int i = 0 ; i < npaxos; i++){
+            ports[i] = 1100+i;
+            peers[i] = host;
+        }
+        for(int i = 0; i < npaxos; i++){
+            kva[i] = new Server(peers, ports, i);
+        }
+
+        Client ck1 = new Client(peers, ports);
+        System.out.println("Test: forget ...");
+        for(int i=0;i<100;i++){
+            ck1.Put("a"+i, i);
+            check(ck1, "a"+i, i);
+        }
+        for(int i = 0; i < npaxos; i++){
+            assertFalse("Server "+i+" Didn't forget."+" Instance number is "+kva[i].px.getInstanceNum(), kva[i].px.getInstanceNum()>1);
+        }
+
+
+
+
+        System.out.println("... Passed");
+
+    }
 }

@@ -66,10 +66,12 @@ public class Server implements KVPaxosRMI {
             while (true) {
                 this.px.Start(this.nextSeqIdx, req.operation);
                 Op decidedOperation = wait(this.nextSeqIdx);
-                this.nextSeqIdx++;
                 if (decidedOperation == null) {
                     break;
                 }
+                this.px.Done(this.nextSeqIdx);
+                this.px.Min();
+                this.nextSeqIdx++;
                 applyOperation(decidedOperation);
                 if (decidedOperation.equals(req.operation)) {
                     return new Response(true, this.stateMachine.get(req.operation.key));
@@ -89,10 +91,12 @@ public class Server implements KVPaxosRMI {
             while (true) {
                 this.px.Start(this.nextSeqIdx, req.operation);
                 Op decidedOperation = wait(this.nextSeqIdx);
-                this.nextSeqIdx++;
                 if (decidedOperation == null) {
                     break;
                 }
+                this.px.Done(this.nextSeqIdx);
+                this.px.Min();
+                this.nextSeqIdx++;
                 applyOperation(decidedOperation);
                 if (decidedOperation.equals(req.operation)) {
                     return new Response(true, -1);

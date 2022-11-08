@@ -8,7 +8,7 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
-import javafx.util.Pair;
+
 /**
  * This class is the main class you need to implement paxos instances.
  */
@@ -479,6 +479,10 @@ public class Paxos implements PaxosRMI, Runnable{
             this.state = state;
             this.v = v;
         }
+    }
+
+    public int getInstanceNum(){
+        return this.instanceMap.size();
     }
 
     /**
